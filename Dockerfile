@@ -13,7 +13,7 @@ ENV GIT_URL=https://github.com/ckan/ckan.git
 ENV GIT_BRANCH=${CKAN_VERSION}
 # Customize these on the .env file if needed
 ENV CKAN_SITE_URL=http://localhost:5000
-ENV CKAN__PLUGINS=image_view text_view recline_view datastore envvars
+ENV CKAN__PLUGINS="image_view text_view recline_view datastore envvars"
 
 # UWSGI options
 ENV UWSGI_HARAKIRI=50
@@ -88,7 +88,7 @@ RUN pip3 install -e git+${GIT_URL}@${GIT_BRANCH}#egg=ckan && \
     ckan config-tool ${CKAN_INI} "ckan.plugins = ${CKAN__PLUGINS}"
 
 # Create a local user and group to run the app
-RUN apt-get update && apt-get install -y --no-install-recommends shadow && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y --no-install-recommends shadow && rm -rf /var/lib/apt/lists/*
 
 ENV UID=1002180000
 ENV GID=1002180000
