@@ -1,4 +1,4 @@
-FROM alpine:3.17
+FROM debian:buster-slim
 ARG CKAN_VERSION=ckan-2.10.3
 
 # Internals, you probably don't need to change these
@@ -13,7 +13,7 @@ ENV GIT_URL=https://github.com/ckan/ckan.git
 ENV GIT_BRANCH=${CKAN_VERSION}
 # Customize these on the .env file if needed
 ENV CKAN_SITE_URL=http://localhost:5000
-ENV CKAN__PLUGINS image_view text_view recline_view datastore envvars
+ENV CKAN__PLUGINS=image_view text_view recline_view datastore envvars
 
 # UWSGI options
 ENV UWSGI_HARAKIRI=50
@@ -21,49 +21,51 @@ ENV UWSGI_HARAKIRI=50
 WORKDIR ${APP_DIR}
 
 # Set up timezone
-RUN apk add --no-cache tzdata
-RUN echo ${TZ} > /etc/timezone
-# Make sure both files are not exactly the same
-RUN if ! [ /usr/share/zoneinfo/${TZ} -ef /etc/localtime ]; then \
-        cp /usr/share/zoneinfo/${TZ} /etc/localtime ;\
-    fi ;
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    echo ${TZ} > /etc/timezone && \
+    rm -rf /var/lib/apt/lists/* && \
+    dpkg-reconfigure -f noninteractive tzdata
 
 # Install necessary packages to run CKAN
-RUN apk add --no-cache git \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
         gettext \
         postgresql-client \
         python3 \
         libxml2 \
-        libxslt \
-        musl-dev \
+        libxslt1-dev \
+        python3-dev \
+        python3-pip \
+        libpq-dev \
+        gcc \
+        make \
         uwsgi \
-        uwsgi-http \
-        uwsgi-corerouter \
-        uwsgi-python \
-        py3-gevent \
-        uwsgi-gevent \
-        libmagic \
+        uwsgi-plugin-python3 \
+        libmagic1 \
         curl \
         patch \
         bash && \
+    rm -rf /var/lib/apt/lists/*
     # Packages to build CKAN requirements and plugins
-    apk add --no-cache --virtual .build-deps \
-        postgresql-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        postgresql-server-dev-all \
         gcc \
         make \
         g++ \
         autoconf \
         automake \
-    	libtool \
+        libtool \
         python3-dev \
         libxml2-dev \
-        libxslt-dev \
-        linux-headers \
-        openssl-dev \
+        libxslt1-dev \
+        linux-headers-amd64 \
+        libssl-dev \
         libffi-dev \
         cargo && \
+    rm -rf /var/lib/apt/lists/*
+
     # Create SRC_DIR
-    mkdir -p ${SRC_DIR} && \
+RUN mkdir -p ${SRC_DIR} && \
     # Install pip, supervisord and uwsgi
     curl -o ${SRC_DIR}/get-pip.py https://bootstrap.pypa.io/get-pip.py && \
     python3 ${SRC_DIR}/get-pip.py && \
@@ -86,8 +88,14 @@ RUN pip3 install -e git+${GIT_URL}@${GIT_BRANCH}#egg=ckan && \
     ckan config-tool ${CKAN_INI} "ckan.plugins = ${CKAN__PLUGINS}"
 
 # Create a local user and group to run the app
-RUN addgroup -g 92 -S ckan && \
-    adduser -u 92 -h /home/ckan -s /bin/bash -D -G ckan ckan
+RUN apt-get update && apt-get install -y --no-install-recommends shadow && rm -rf /var/lib/apt/lists/*
+
+ENV UID=1002180000
+ENV GID=1002180000
+RUN /usr/sbin/groupadd -g ${GID} ckan
+RUN /usr/sbin/useradd -s /bin/sh -g ${GID} -u ${UID} ckan
+# RUN addgroup -g 1002180000 -S ckan && \
+#     adduser -u 1002180000 -h /home/ckan -s /bin/bash -D -G ckan ckan
 
 # Create local storage folder
 RUN mkdir -p ${CKAN_STORAGE_PATH} && \
@@ -104,5 +112,6 @@ ONBUILD RUN mkdir /docker-entrypoint.d
 EXPOSE 5000
 
 HEALTHCHECK --interval=60s --timeout=5s --retries=5 CMD curl --fail http://localhost:5000/api/3/action/status_show || exit CMD ["/srv/app/start_ckan.sh"]
+RUN chown ckan:ckan -R /srv/app
 
 CMD ["/srv/app/start_ckan.sh"]
